@@ -10,31 +10,62 @@
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap" rel="stylesheet">
     
     <style>
-        :root { --burgundy: #800000; --success-green: #27ae60; --star-gold: #fbc02d; }
+        :root { 
+            --house-green: #27ae60; 
+            --star-gold: #fbc02d; 
+        }
+
         body { font-family: 'Montserrat', sans-serif; margin: 0; background-color: #fff; }
+        
+        /* CENTERED HEADER */
         .header { text-align: center; padding: 30px 20px; background: #fdfdfd; border-bottom: 1px solid #eee; }
         h1 { margin: 0; font-size: 1.8rem; font-weight: 700; color: #1a1a1a; }
         .subtitle { color: #666; font-size: 0.9rem; margin-top: 5px; }
 
+        /* CENTERED MAP BOX */
         #map { 
             height: 700px; width: 95%; max-width: 1300px;
             margin: 20px auto; border-radius: 8px; 
             box-shadow: 0 10px 30px rgba(0,0,0,0.1); border: 1px solid #ddd;
         }
 
-        /* SMALLER LOGO MARKER */
-        .logo-marker {
-            filter: drop-shadow(0 2px 2px rgba(0,0,0,0.2));
-            transition: 0.2s;
+        /* SOLID GREEN HOUSE PIN */
+        .house-wrapper { transition: 0.2s; }
+        .house-wrapper:hover { transform: scale(1.4); z-index: 1000 !important; }
+        
+        .house-pin {
+            width: 24px; height: 18px;
+            background: var(--house-green);
+            position: relative;
+            border-radius: 1px;
+            filter: drop-shadow(0 2px 3px rgba(0,0,0,0.25));
         }
-        .logo-marker:hover { transform: scale(1.4); z-index: 1000 !important; }
+        .house-pin::before { /* Roof */
+            content: ''; position: absolute; top: -11px; left: -2px;
+            border-left: 14px solid transparent;
+            border-right: 14px solid transparent;
+            border-bottom: 11px solid var(--house-green);
+        }
+        .house-pin::after { /* Door (Now Green to match house) */
+            content: ''; position: absolute; bottom: 0; left: 8px;
+            width: 8px; height: 9px;
+            background: var(--house-green);
+            border-top: 1px solid rgba(0,0,0,0.1); /* Subtle line to define door */
+        }
 
         /* POPUP STYLING */
-        .leaflet-popup-content-wrapper { border-radius: 4px; padding: 5px; }
+        .leaflet-popup-content-wrapper { border-radius: 4px; padding: 8px; }
         .value-label { font-size: 10px; color: #999; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
-        .value-amount { font-size: 18px; font-weight: 700; color: var(--success-green); margin-bottom: 8px; }
+        .value-amount { font-size: 18px; font-weight: 700; color: var(--house-green); margin-bottom: 8px; }
         .star-rating { color: var(--star-gold); font-size: 16px; margin-bottom: 8px; }
-        .address-text { font-size: 12px; color: #444; border-top: 1px solid #eee; padding-top: 8px; line-height: 1.4; }
+        
+        .review-quote { 
+            font-style: italic; font-size: 12px; color: #444; 
+            margin-bottom: 12px; line-height: 1.4; display: block;
+            border-left: 2px solid var(--house-green); padding-left: 8px;
+        }
+        
+        .address-text { font-size: 12px; color: #444; border-top: 1px solid #eee; padding-top: 10px; line-height: 1.4; }
     </style>
 </head>
 <body>
@@ -61,12 +92,12 @@
             .on('markgeocode', e => map.setView(e.geocode.center, 12))
             .addTo(map);
 
-        const logoIcon = L.icon({
-            iconUrl: 'logo.png',
-            iconSize: [20, 20], 
-            iconAnchor: [12, 12],
-            popupAnchor: [0, -12],
-            className: 'logo-marker'
+        const houseIcon = L.divIcon({
+            className: 'house-wrapper',
+            html: '<div class="house-pin"></div>',
+            iconSize: [28, 28],
+            iconAnchor: [14, 14],
+            popupAnchor: [0, -15]
         });
 
         const formatter = new Intl.NumberFormat('en-US', {
@@ -76,28 +107,37 @@
         Papa.parse("data.csv", {
             download: true, header: true, skipEmptyLines: true,
             complete: function(results) {
+                const markers = [];
                 results.data.forEach(job => {
                     if(job.lat && job.lng && parseFloat(job.lat) !== 0) {
                         const priceDisplay = formatter.format(job.price);
-                        
-                        // Star logic: create a string of star characters based on the "stars" column
-                        const starCount = parseInt(job.stars) || 5;
-                        const starsHtml = '★'.repeat(starCount);
+                        const starsHtml = '★'.repeat(5);
+
+                        // Only show review if it exists in data.csv and is longer than 5 chars
+                        const hasReview = (job.review && job.review.length > 5 && job.review !== "Verified Customer");
+                        const reviewHtml = hasReview ? `<span class="review-quote">"${job.review}"</span>` : '';
 
                         const popupContent = `
-                            <div style="width:180px">
+                            <div style="width:200px">
                                 <div class="value-label">Total Job Amount</div>
                                 <div class="value-amount">${priceDisplay}</div>
                                 <div class="star-rating">${starsHtml}</div>
+                                ${reviewHtml}
                                 <div class="address-text"><strong>Site:</strong><br>${job.address}</div>
                             </div>
                         `;
 
-                        L.marker([parseFloat(job.lat), parseFloat(job.lng)], {icon: logoIcon})
+                        L.marker([parseFloat(job.lat), parseFloat(job.lng)], {icon: houseIcon})
                             .addTo(map)
                             .bindPopup(popupContent);
+                        
+                        markers.push([parseFloat(job.lat), parseFloat(job.lng)]);
                     }
                 });
+                
+                if(markers.length > 0) {
+                    map.fitBounds(L.latLngBounds(markers), { padding: [50, 50] });
+                }
             }
         });
     </script>
